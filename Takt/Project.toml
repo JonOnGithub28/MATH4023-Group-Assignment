@@ -1,0 +1,12 @@
+name = "Takt"
+uuid = "1c601e1f-df0f-48cc-95e9-31092401364b"
+version = "0.1.0"
+authors = ["Thomas Newman <thomas.p.newman@outlook.com>"]
+
+[deps]
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+
+[compat]
+JSON = "1.10.0"
+Printf = "1.11.0"
