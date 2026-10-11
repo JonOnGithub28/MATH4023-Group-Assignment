@@ -2,7 +2,7 @@
 
 julia_version = "1.13.1"
 manifest_format = "2.1"
-project_hash = "d682fe0ae1357fef1188cd5482aacc4936fcbefe"
+project_hash = "bfe8952cec63d9ce26a632cf1629801fb6957be3"
 
 [[deps.ASL_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -801,10 +801,10 @@ version = "1.15.1+3"
 
 [[deps.Hwloc_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "XML2_jll", "Xorg_libpciaccess_jll"]
-git-tree-sha1 = "8015ef94425626913eaa6933eb32e7c9bbe08030"
+git-tree-sha1 = "cbbd99d516990d05c02aa132aa077b2bf50ae323"
 registries = "General"
 uuid = "e33a78d0-f292-5ffc-b300-72abe9b543c8"
-version = "2.14.1+0"
+version = "2.15.0+0"
 
 [[deps.HypergeometricFunctions]]
 deps = ["Gamma", "LinearAlgebra"]
@@ -1038,10 +1038,10 @@ version = "3.2.0+1"
 
 [[deps.JuMP]]
 deps = ["LinearAlgebra", "MacroTools", "MathOptInterface", "MutableArithmetics", "OrderedCollections", "PrecompileTools", "Printf", "SparseArrays"]
-git-tree-sha1 = "bed3712e45396e205ddcec9e56479f2ab6e6aebc"
+git-tree-sha1 = "c21108220410d7b77d0385c487259abb7e5c97db"
 registries = "General"
 uuid = "4076af6c-e467-56ae-b986-b466b2749572"
-version = "1.32.0"
+version = "1.32.1"
 
     [deps.JuMP.extensions]
     JuMPDimensionalDataExt = "DimensionalData"
@@ -1441,10 +1441,10 @@ uuid = "91d4177d-7536-5919-b921-800302f37372"
 version = "1.6.1+0"
 
 [[deps.OrderedCollections]]
-git-tree-sha1 = "05f45c2e0de6259db764adbfd2f1dc6d3f8de13c"
+git-tree-sha1 = "f9b03759e9ef463718934fbed30820b39997511e"
 registries = "General"
 uuid = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
-version = "2.0.1"
+version = "2.0.2"
 
 [[deps.PCRE2_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -1817,10 +1817,10 @@ version = "1.0.0"
 
 [[deps.SIMD]]
 deps = ["PrecompileTools"]
-git-tree-sha1 = "e24dc23107d426a096d3eae6c165b921e74c18e4"
+git-tree-sha1 = "1ed93b3c4ffd33cc0c5d17eeb46f1b504ce42731"
 registries = "General"
 uuid = "fdea26ae-647d-5447-a871-4b548cad5224"
-version = "3.7.2"
+version = "3.8.0"
 
 [[deps.SPRAL_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Hwloc_jll", "JLLWrappers", "Libdl", "METIS_jll", "libblastrampoline_jll"]
@@ -2063,7 +2063,7 @@ uuid = "1c601e1f-df0f-48cc-95e9-31092401364b"
 version = "0.1.0"
 
 [[deps.TaktMap]]
-deps = ["CSV", "CairoMakie", "DataFrames", "Statistics", "Takt", "Utils"]
+deps = ["CSV", "CairoMakie", "Colors", "DataFrames", "LinearAlgebra", "Statistics", "Takt"]
 path = "TaktMap"
 uuid = "8623ed56-047d-4d59-9020-dc8d7edeb9bd"
 version = "0.1.0"
@@ -2141,11 +2141,6 @@ git-tree-sha1 = "ca0969166a028236229f63514992fc073799bb78"
 registries = "General"
 uuid = "41fe7b60-77ed-43a1-b4f0-825fd5a5650d"
 version = "0.2.0"
-
-[[deps.Utils]]
-path = "Utils"
-uuid = "9cbddb1a-b9eb-4e25-b778-c61b7cfed8f2"
-version = "0.1.0"
 
 [[deps.Vulkan_Loader_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Wayland_jll", "Xorg_libX11_jll", "Xorg_libXrandr_jll", "xkbcommon_jll"]

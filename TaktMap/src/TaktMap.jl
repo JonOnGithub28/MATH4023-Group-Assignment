@@ -6,11 +6,13 @@ function push_unique!(vect, item)
 end
 
 using Takt  # Local packages
-using Statistics, CSV, DataFrames, CairoMakie
+using LinearAlgebra, Statistics, CSV, DataFrames, CairoMakie
+using Colors #ColorSchemes
 
 struct TrainLine
     name::String;
     stations::Vector{String};
+    lanes::Vector{Int};  # Which "lane" does the train run on in each step
 end
 
 struct Station
@@ -36,24 +38,30 @@ function update_from_event(
     e::Takt.Event,
     station_name_list::Vector{String},
     line_list::Vector{TrainLine},
+    route_usage::Dict{Tuple{String, String}, Int},
 )
-    # DEBUG: check which lines contain Feldkirch
-    #if e.station == "Feldkirch"
-    #    println("line $e.line contains FeldKirch")
-    #end
-
     # Check if we've seen the line before
     push_unique!(station_name_list, e.station)
     for line in line_list
         if line.name == e.line
             # Already have this line
-            push_unique!(line.stations, e.station)
+            if !(e.station in line.stations)
+                last_station = line.stations[end]
+                route = (last_station, e.station)
+                if haskey(route_usage, route)
+                    route_usage[route] += 1
+                else
+                    route_usage[route] = 1
+                end
+                push!(line.stations, e.station)
+                push!(line.lanes, route_usage[route])
+            end
             return
         end
     end
 
     # This is a new line
-    new_line = TrainLine(e.line, [e.station])
+    new_line = TrainLine(e.line, [e.station], [])
 
     push!(line_list, new_line)
 end
@@ -99,8 +107,10 @@ function generate_problem_map_data(P::Takt.Problem)
     # Fetch the station names and lines``
     station_name_list = String[]
     line_list = TrainLine[]
-    for e in P.events
-        update_from_event(e, station_name_list, line_list)
+
+    route_usage = Dict{Tuple{String, String}, Int}()  # How many trains we've seen that run from station A to station B directly
+    for e in Iterators.reverse(P.events)  # For whatever reason, the new lines from each problem are added at the START of events vector. To get a consistent order we need to reverse this.
+        update_from_event(e, station_name_list, line_list, route_usage)
     end
 
     # Fetch coordinates of each station and form the Station() list
@@ -152,6 +162,18 @@ function vector_norm(x, y)
     return sqrt(x^2 + y^2)
 end
 
+# Given two parameterized lines (in {p + tv : t free} form),
+# returns the point of intersection
+function parametrized_lines_bisector(
+    p1_x, p1_y, v1_x, v1_y,
+    p2_x, p2_y, v2_x, v2_y,
+)
+    A = [v1_x  -v2_x; v1_y  -v2_y]
+    b = [p2_x - p1_x, p2_y - p1_y]
+    t,s = A \ b
+    return p1_x + t * v1_x, p1_y + t * v1_y
+end
+
 # Gets the unit-length vector angular bisector on the left side
 # (here we imagine vector 1 ending where vector 2 begins)
 function unit_left_side_bisector(x_1, y_1, x_2, y_2)
@@ -176,7 +198,12 @@ end
 # Shifts the points on a line to the "left", to model the fact
 # swiss trains drive on the left (and to prevent overlap between lines going 
 # in distinct directions)
-function left_shift_points(E_vals, N_vals, shift)
+function left_shift_points(
+    E_vals, 
+    N_vals,
+    lane_numbers,
+    shift
+)
     # We need to have at least two points for this to make sense
     @assert length(E_vals) >= 2
     @assert length(N_vals) >= 2
@@ -185,64 +212,89 @@ function left_shift_points(E_vals, N_vals, shift)
     n = length(N_vals)
     i = 1
 
-    shifted_E_vals = Float64[]
-    shifted_N_vals = Float64[]
+    # Shift needs to be handled in two stages:
+    # 1. Shift each segment individually
+    # 2. Reconcile the different shifts of adjacent segments
 
-    local delta_E_last
-    local delta_N_last
-    local delta_E_next
-    local delta_N_next
+    # Stage 1
+    stage_1_shifted_E_vals = Float64[]
+    stage_1_shifted_N_vals = Float64[]
+    delta_E_vals = Float64[]
+    delta_N_vals = Float64[]
+    for i in 1:(n-1)
+        delta_E = E_vals[i+1] - E_vals[i]
+        delta_N = N_vals[i+1] - N_vals[i]
+        push!(delta_E_vals, delta_E)
+        push!(delta_N_vals, delta_N)
 
-    # The first and last point need to be handled separately
+        delta_norm = vector_norm(delta_E, delta_N)
+        delta_E_rot = -delta_N/delta_norm
+        delta_N_rot = delta_E/delta_norm
 
-    let  # First point
-        delta_E_next = E_vals[2] - E_vals[1]
-        delta_N_next = N_vals[2] - N_vals[1]
+        lane_num = lane_numbers[i]
 
-        delta_norm = vector_norm(delta_E_next, delta_N_next)
-        delta_E_rot = -delta_N_next/delta_norm
-        delta_N_rot = delta_E_next/delta_norm
-
-        push!(shifted_E_vals, E_vals[1] + shift * delta_E_rot)
-        push!(shifted_N_vals, N_vals[1] + shift * delta_N_rot)
-
-        i += 1
-        delta_E_last = delta_E_next
-        delta_N_last = delta_N_next
+        push!(stage_1_shifted_E_vals, E_vals[i] + shift * lane_num * delta_E_rot)
+        push!(stage_1_shifted_N_vals, N_vals[i] + shift * lane_num * delta_N_rot)
+        push!(stage_1_shifted_E_vals, E_vals[i+1] + shift * lane_num * delta_E_rot)
+        push!(stage_1_shifted_N_vals, N_vals[i+1] + shift * lane_num * delta_N_rot)
     end
 
-    while i <= n-1
-        delta_E_next = E_vals[i+1] - E_vals[i]
-        delta_N_next = N_vals[i+1] - N_vals[i]
+    # Stage 2
+    shifted_E_vals = Float64[stage_1_shifted_E_vals[1]]
+    shifted_N_vals = Float64[stage_1_shifted_N_vals[1]]
+    for i in 1:(n-2)
+        # The ideal approach is to replace the two shifted points at each
+        # intermediate station with the point of intersection between the 
+        # corresponding segments. However, the linear system needed to calculate
+        # this becomes unstable when the shifts are close to parallel, causing stops to be quite far off.
+        # In that case, we just use the average position instead.
 
-        (b_E, b_N) = unit_left_side_bisector(
-            delta_E_last, delta_N_last, 
-            delta_E_next, delta_N_next
-        )
+        local new_E
+        local new_N
+        a = dot((delta_E_vals[i], delta_N_vals[i]), (delta_E_vals[i+1], delta_N_vals[i+1]))
+        if 1 - abs(a) < 0.1  # arbitrary cutoff, chosen by eye
+            # Shifts are essentially parallel
+            new_E = (stage_1_shifted_E_vals[2*i] + stage_1_shifted_E_vals[2*i+1])/2
+            new_N = (stage_1_shifted_N_vals[2*i] + stage_1_shifted_N_vals[2*i+1])/2
+        else 
+            # Shifts are different enough, so we use the intersection
+            new_E, new_N = parametrized_lines_bisector(
+                stage_1_shifted_E_vals[2*i], stage_1_shifted_N_vals[2*i], delta_E_vals[i], delta_N_vals[i],
+                stage_1_shifted_E_vals[2*i+1], stage_1_shifted_N_vals[2*i+1], delta_E_vals[i+1], delta_N_vals[i+1],
+            )
+        end
 
-        push!(shifted_E_vals, E_vals[i] + shift * b_E)
-        push!(shifted_N_vals, N_vals[i] + shift * b_N)
-
-        delta_E_last = delta_E_next
-        delta_N_last = delta_N_next
-        i += 1
+        push!(shifted_E_vals, new_E)
+        push!(shifted_N_vals, new_N)
     end
-
-    let  # Last point
-        delta_norm = vector_norm(delta_E_next, delta_N_next)
-        delta_E_rot = -delta_N_last/delta_norm
-        delta_N_rot = delta_E_last/delta_norm
-
-        push!(shifted_E_vals, E_vals[n] + shift * delta_E_rot)
-        push!(shifted_N_vals, N_vals[n] + shift * delta_N_rot)
-    end
+    push!(shifted_E_vals, stage_1_shifted_E_vals[end])
+    push!(shifted_N_vals, stage_1_shifted_N_vals[end])
 
     return shifted_E_vals, shifted_N_vals
 end
 
-
-
 MAP_FONT_SIZE = 8
+LINE_WIDTH = 300 # Measured in data scale
+LANE_SPACING = 700  # Distance (meters) between any two lanes on the same side, or twice the distance between the innermost left and right lanes.
+
+
+# Determines the assignment of train lines to colors, based on their 3-letter prefix,
+# so the same route in different directions has the same color.
+function generate_color_key(line_names::Vector{String})
+    prefixes_seen = String[]
+    for name in line_names
+        prefix = String(split(name, ':')[1])
+        push_unique!(prefixes_seen, prefix)
+    end
+
+    num_prefixes = length(prefixes_seen)
+    color_pool = distinguishable_colors(num_prefixes, [colorant"white"];
+        dropseed = true,
+        lchoices = range(0, 50, length = 15),
+        cchoices = range(30, 100, length = 15)
+    )
+    return Dict(zip(prefixes_seen, color_pool))
+end
 
 """
 Produces a plot to visualize a given TaktMap.ProblemMapData() object.
@@ -250,31 +302,46 @@ Produces a plot to visualize a given TaktMap.ProblemMapData() object.
 Options:
 - tight: If true, the bounding box is set based on the specific problem given. Otherwise uses a bounding box for P12. Set to true if you want a tight graph for one problem, set to false if you want graphs that are more easily comparable between problems.
 """
-function plot_map_data(
-    data::ProblemMapData, 
+function save_plot_of_map_data(
+    data::ProblemMapData,
+    name::String,
     tight::Bool,  # whether to use tight square bounds for problem in question (defaults to using the square bounds for P12 otherwise)
+    labels::Bool,  # whether to include station labels
 )
-    fig = Figure(size = (2400,2400))
+    fig = Figure(size = (600,600))
     ax = Axis(fig[1,1], aspect = DataAspect())  # anything except 1 to 1 scaling will break the directional marker code
+
+    # reactive screen-to-data scale (only needed for plotting the lines, which CairoMakie does not allow to be set to data scale natively)
+    s2d = lift(
+        (flims, vp) -> widths(vp)[1]/widths(flims)[1], 
+        ax.finallimits,    # limits of the plot in screen coordinates
+        ax.scene.viewport  #                       data
+    )
+
+    line_size = @lift(LINE_WIDTH * $s2d)
+    line_marker_size = LINE_WIDTH * 4  # size used for marks along a particular line (i.e. the directional and start/end marks)
+    station_size = LINE_WIDTH * 10
+    font_size = LINE_WIDTH * 3
 
     # Plot the stations
     station_E_vals = [station.E for station in data.stations]
     station_N_vals = [station.N for station in data.stations]
     scatter!(ax, station_E_vals, station_N_vals,
-        color = :black,
-        markersize = 14,
+        markerspace = :data,
+        markersize = station_size,
+        color = :gray,
     )
-    station_names = [station.name for station in data.stations]
-    #annotation!(ax, E_values, N_values, text = station_names,
-    #    fontsize = 8
-    #)
 
+    # Determine the colors assigned to each line, based on their 3 letter prefix
+    line_names = [line.name for line in data.lines]
+    line_color_key = generate_color_key(line_names)
 
     # Plot the train lines
-    line_number = 0
     for line in data.lines
-        line_number += 1
-        line_color = Cycled(line_number) 
+        prefix = String(split(line.name, ':')[1])
+        line_color = line_color_key[prefix]
+
+        line_opacity = 0.7
 
         line_E_vals = Float64[]
         line_N_vals = Float64[]
@@ -283,42 +350,82 @@ function plot_map_data(
             push!(line_E_vals, E)
             push!(line_N_vals, N)
         end
-        n = length(line_E_vals)
 
-        LEFT_RIGHT_HALF_SPACING = 600  # half the distance between the left and right tracks used for plotting, in meters
         line_E_vals_shifted, line_N_vals_shifted = left_shift_points(
-            line_E_vals, line_N_vals, LEFT_RIGHT_HALF_SPACING
+            line_E_vals, line_N_vals, line.lanes, LANE_SPACING
         )
 
         # Determine where we want to place the directional markers
+        n = length(line_E_vals_shifted)
         E_dir_vals = Float64[]  # for directional (arrow) markers
         N_dir_vals = Float64[]
         rotation_angles = Float64[]  # rotational angles for directional markers
         DIRECTIONAL_STEP_PROPORTION = 0.33  # how far along each segment the direction marker should be placed
         for i in 1:(n-1)
-            # Could optimise, as we compute these deltas anyway in shifting the points 
-            # but this is unimportant
-            delta_E = line_E_vals[i+1] - line_E_vals[i]
-            delta_N = line_N_vals[i+1] - line_N_vals[i]
+            delta_E = line_E_vals_shifted[i+1] - line_E_vals_shifted[i]
+            delta_N = line_N_vals_shifted[i+1] - line_N_vals_shifted[i]
 
             push!(E_dir_vals, line_E_vals_shifted[i] + delta_E * DIRECTIONAL_STEP_PROPORTION)
             push!(N_dir_vals, line_N_vals_shifted[i] + delta_N * DIRECTIONAL_STEP_PROPORTION)
             push!(rotation_angles, atan(delta_N, delta_E))
         end
 
-        lines!(ax, line_E_vals_shifted, line_N_vals_shifted, 
-            label = line.name,
+        # The line itself
+        lines!(ax, line_E_vals_shifted, line_N_vals_shifted,
             color = line_color,
-            alpha = 0.7
+            linewidth = line_size,
+            label = line.name,
+            alpha = line_opacity
         )
+
+        # Start point
+        scatter!(ax, line_E_vals_shifted[1], line_N_vals_shifted[1],
+            markerspace = :data,
+            markersize = line_marker_size,
+            marker = :circle,
+            color = :transparent,
+            strokecolor = line_color,
+            strokewidth = 0.25,
+            alpha = line_opacity
+        )
+
+        # End point
+        scatter!(ax, line_E_vals_shifted[end], line_N_vals_shifted[end],
+            markerspace = :data,
+            markersize = line_marker_size,
+            marker = :cross,
+            color = line_color,
+            alpha = line_opacity
+        )
+
+        # Intermediate stops
+        scatter!(ax, line_E_vals_shifted[2:end-1], line_N_vals_shifted[2:end-1], 
+            markerspace = :data,
+            markersize = line_marker_size,
+            marker = :circle,
+            color = line_color,
+            alpha = line_opacity,
+        )
+
+        # Directional markers
         scatter!(ax, E_dir_vals, N_dir_vals,
-            markersize = 8,
+            markerspace = :data,
+            markersize = line_marker_size,
             rotation = rotation_angles,
             marker = :rtriangle,
             color = line_color,
         )
     end
 
+    # Station names
+    if labels
+        station_names = [station.name for station in data.stations]
+        annotation!(ax, station_E_vals, station_N_vals,
+            text = station_names,
+            labelspace = :data,
+            fontsize = 3,
+        )
+    end
 
     # Set x and y lims for plot
     if tight
@@ -328,6 +435,7 @@ function plot_map_data(
         min_N = minimum(station_N_vals)
         max_N = maximum(station_N_vals)
         N_range = max_N - min_N
+        max_range = max(E_range, N_range)
         PADDING = 0.1
         xlims!(ax, 
             min_E - PADDING * E_range,
@@ -339,14 +447,17 @@ function plot_map_data(
         )
     else
         # Result of performing above for P12
-        E_low = -116794
-        E_high = 201197
-        N_low = -176671
-        N_high = 141320
+        E_low = -131248
+        E_high = 215651
+        N_low = -139393
+        N_high = 104042
 
         xlims!(ax, E_low, E_high)
         ylims!(ax, N_low, N_high)
     end
+
+    hidedecorations!(ax)
+    hidespines!(ax)
 
     #=
     min_E = minimum(station_E_vals)
@@ -366,16 +477,18 @@ function plot_map_data(
     )
     =#
 
-
-    Legend(fig[1, 2], ax)
-    save("map.svg", fig)
+    legend_rows = cld(length(data.lines), 12)
+    Legend(fig[2, 1], ax, 
+        orientation = :horizontal, 
+        nbanks = legend_rows, 
+        framevisible = false,
+        labelsize = 5,
+        patchsize = (5, 2.5)
+    )
+    save("$name.svg", fig)
 end
 
 export generate_problem_map_data
-export plot_map_data
-
-#P = Problem(12)
-#data = generate_problem_map_data(P)
-#plot_map_data(data, true)
+export save_plot_of_map_data
 
 end # module TaktMap

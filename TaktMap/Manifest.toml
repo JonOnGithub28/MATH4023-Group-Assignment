@@ -2,7 +2,7 @@
 
 julia_version = "1.13.1"
 manifest_format = "2.1"
-project_hash = "e7a6ca36dfd1c06319c63cf24047e604b0557bf8"
+project_hash = "4f5e77240585b51ff83128c410efd2ca0ecba366"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -1458,10 +1458,10 @@ version = "1.0.0"
 
 [[deps.SIMD]]
 deps = ["PrecompileTools"]
-git-tree-sha1 = "e24dc23107d426a096d3eae6c165b921e74c18e4"
+git-tree-sha1 = "1ed93b3c4ffd33cc0c5d17eeb46f1b504ce42731"
 registries = "General"
 uuid = "fdea26ae-647d-5447-a871-4b548cad5224"
-version = "3.7.2"
+version = "3.8.0"
 
 [[deps.Scratch]]
 deps = ["Dates"]
@@ -1690,7 +1690,7 @@ uuid = "1c601e1f-df0f-48cc-95e9-31092401364b"
 version = "0.1.0"
 
 [[deps.TaktMap]]
-deps = ["CSV", "CairoMakie", "DataFrames", "Statistics", "Takt", "Utils"]
+deps = ["CSV", "CairoMakie", "Colors", "DataFrames", "LinearAlgebra", "Statistics", "Takt"]
 path = "."
 uuid = "8623ed56-047d-4d59-9020-dc8d7edeb9bd"
 version = "0.1.0"
@@ -1765,11 +1765,6 @@ version = "1.29.0"
     Latexify = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
     NaNMath = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
     Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
-
-[[deps.Utils]]
-path = "../Utils"
-uuid = "9cbddb1a-b9eb-4e25-b778-c61b7cfed8f2"
-version = "0.1.0"
 
 [[deps.WebP]]
 deps = ["CEnum", "ColorTypes", "FileIO", "FixedPointNumbers", "ImageCore", "libwebp_jll"]
